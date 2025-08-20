@@ -1,4 +1,3 @@
-# app.py
 import json
 import re
 import uuid
@@ -40,7 +39,7 @@ AZURE_API_KEY = sget("azure.AZURE_API_KEY", "")
 AZURE_OPENAI_ENDPOINT = sget("azure_openai.AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_API_KEY = sget("azure_openai.AZURE_OPENAI_API_KEY", "")
 AZURE_OPENAI_API_VERSION = sget("azure_openai.AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
-GPT_DEPLOYMENT = sget("azure_openai.GPT_DEPLOYMENT", "gpt-4")  # Azure *deployment* name
+GPT_DEPLOYMENT = sget("azure_openai.GPT_DEPLOYMENT", "gpt-4")
 
 
 # =========================
@@ -53,9 +52,8 @@ if DocumentIntelligenceClient and AzureKeyCredential and AZURE_DI_ENDPOINT and A
             endpoint=AZURE_DI_ENDPOINT,
             credential=AzureKeyCredential(AZURE_API_KEY),
         )
-    except Exception as e:
+    except Exception:
         di_client = None
-        st.sidebar.warning(f"Document Intelligence client not initialized: {e}")
 
 
 # =========================
@@ -211,7 +209,6 @@ ONLY return the JSON. No extra commentary.
     """.strip()
 
 
-# ---- Azure OpenAI via REST (from secrets) ----
 def azure_chat(messages, *, temperature=0.0, max_tokens=1800, force_json=True) -> str:
     if not (AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY and GPT_DEPLOYMENT):
         raise RuntimeError(
@@ -243,7 +240,6 @@ def call_gpt_for_envelope(input_payload: Dict[str, Any]) -> Optional[Dict[str, A
         force_json=True
     )
 
-    # Parse JSON strictly; if model adds text, try to extract
     try:
         return json.loads(content)
     except Exception:
@@ -318,16 +314,6 @@ with st.sidebar:
     mode = st.radio("Choose Input Type:", ["Upload JSON", "Paste JSON", "Load Demo Sample"])
     st.markdown("**Note:** No PHI is logged. Only local processing for this demo.")
 
-    st.divider()
-    st.subheader("🔐 Secrets Status")
-    def ok(x: bool) -> str:
-        return "✅" if x else "⚠️"
-
-    st.write(f"{ok(bool(AZURE_OPENAI_ENDPOINT))} `azure_openai.AZURE_OPENAI_ENDPOINT`")
-    st.write(f"{ok(bool(AZURE_OPENAI_API_KEY))} `azure_openai.AZURE_OPENAI_API_KEY`")
-    st.write(f"{ok(bool(GPT_DEPLOYMENT))} `azure_openai.GPT_DEPLOYMENT`")
-    st.write(f"{ok(bool(AZURE_DI_ENDPOINT and AZURE_API_KEY))} Azure Document Intelligence (optional)")
-
 json_payload: Optional[Dict[str, Any]] = None
 
 if mode == "Upload JSON":
@@ -359,14 +345,12 @@ st.markdown("---")
 
 if json_payload and st.button("🚀 Process Intake"):
     with st.spinner("Extracting & normalizing ClaimEnvelope..."):
-        # 1) GPT extraction
         gpt_out = None
         try:
             gpt_out = call_gpt_for_envelope(json_payload)
         except Exception as e:
-            st.warning(f"Model extraction failed, will try fallback from hints. Details: {e}")
+            st.warning(f"Model extraction failed, using fallback hints. Details: {e}")
 
-        # 2) Fallback from hints if GPT couldn’t be parsed
         if not gpt_out:
             hints = json_payload.get("hints", {})
             gpt_out = {
@@ -403,7 +387,6 @@ if json_payload and st.button("🚀 Process Intake"):
                 "meta": {"source": json_payload.get("source", "upload"), "created_at": datetime.utcnow().isoformat() + "Z", "confidence": 0.75}
             }
 
-        # 3) Schema coercion + HIL rule
         final_envelope = coerce_schema(gpt_out)
 
         st.success("✅ ClaimEnvelope generated")
@@ -417,6 +400,5 @@ if json_payload and st.button("🚀 Process Intake"):
             mime="application/json"
         )
 
-# Footer (no secrets, no PHI)
 st.markdown("---")
 st.caption("Demo only — emits no external events and stores nothing. For production, add RBAC, audits, event bus, and OCR pipeline.")
