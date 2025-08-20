@@ -1,0 +1,5 @@
+streamlit
+requests
+azure-core
+azure-ai-documentintelligence
+openai
